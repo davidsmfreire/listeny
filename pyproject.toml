@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "listeny"
+version = "0.1.0"
+description = "Discord music bot"
+authors = ["davidsmfreire <davidsmfreire@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+"discord.py" = "^2.4.0"
+python-dotenv = "^1.0.1"
+pynacl = "^1.5.0"
+youtube-search = "^2.1.2"
+yt-dlp = "^2024.9.27"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
