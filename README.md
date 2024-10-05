@@ -8,6 +8,9 @@ Commands:
 -- Play song by name or youtube url
 /play <youtube query>
 
+-- Play song by name or youtube url, skipping queue (admin only)
+/playnow <youtube query>
+
 -- See queue
 /queue
 
