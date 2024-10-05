@@ -138,11 +138,11 @@ async def _play_media(ctx, search_query: str, now: bool):
 
         voice_client = ctx.voice_client
 
-        if "https://" in search_query and "spotify" not in search_query:
+        if search_query.startswith(("https://www.youtube.com/watch?", "https://youtu.be/")):
             url = search_query
             title = None
         else:
-            if "https://" in search_query and "spotify" in search_query:
+            if search_query.startswith("https://open.spotify.com/"):
                 try:
                     title, artist = get_song_title_from_spotify_url(search_query)
                 except Exception as e:
