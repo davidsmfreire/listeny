@@ -60,6 +60,13 @@ async def add_to_queue(ctx, song: Song):
     music_queue.append(song)
     await ctx.send(f"Adding to queue:\n{get_queue_repr()}")
 
+async def skip_queue(ctx, song: Song):
+    music_queue.insert(0, song)
+    if ctx.voice_client.is_playing():
+        ctx.voice_client.stop()
+    else:
+        await play_next_in_queue(ctx)
+
 
 async def play_next_in_queue(ctx):
     voice_client = ctx.voice_client
@@ -130,43 +137,50 @@ async def play_song(ctx, song: Song, offset: int = 0):
 
 
 async def _play_media(ctx, search_query: str, now: bool):
-    if ctx.author.voice:
-        voice_channel = ctx.author.voice.channel
-
-        if not ctx.voice_client:
-            await voice_channel.connect()
-
-        voice_client = ctx.voice_client
-
-        if search_query.startswith(("https://www.youtube.com/watch?", "https://youtu.be/")):
-            url = search_query
-            title = None
-        else:
-            if search_query.startswith("https://open.spotify.com/"):
-                try:
-                    title, artist = get_song_title_from_spotify_url(search_query)
-                except Exception as e:
-                    await ctx.send(f"Failed to get song from spotify url: {str(e)}")
-                    return
-                search_query = f"{title}, {artist}"
-            results = YoutubeSearch(search_query, max_results=1).to_dict()
-            title = results[0]["title"]
-            url = "https://youtube.com" + results[0]["url_suffix"]
-
-        with YoutubeDL(youtube_dl_opts) as ydl:
-            song_info = ydl.extract_info(url, download=False)
-            if title is None:
-                title = song_info["title"]
-
-        song = Song(title=title, url=song_info["url"])
-
-        if now or not voice_client.is_playing():
-            await play_song(ctx, song)
-            await ctx.send(f"Now playing: {title}")
-        else:
-            await add_to_queue(ctx, song)
-    else:
+    if not ctx.author.voice:
         await ctx.send("You need to be in a voice channel to play music!")
+        return
+
+    voice_channel = ctx.author.voice.channel
+
+    if not ctx.voice_client:
+        await voice_channel.connect()
+
+    voice_client = ctx.voice_client
+
+    if search_query.startswith(("https://www.youtube.com/watch?", "https://youtu.be/")):
+        url = search_query
+        title = None
+    else:
+        if search_query.startswith("https://open.spotify.com/"):
+            try:
+                title, artist = get_song_title_from_spotify_url(search_query)
+            except Exception as e:
+                await ctx.send(f"Failed to get song from spotify url: {str(e)}")
+                return
+            search_query = f"{title}, {artist}"
+        results = YoutubeSearch(search_query, max_results=1).to_dict()
+        title = results[0]["title"]
+        url = "https://youtube.com" + results[0]["url_suffix"]
+
+    with YoutubeDL(youtube_dl_opts) as ydl:
+        song_info = ydl.extract_info(url, download=False)
+        if title is None:
+            title = song_info["title"]
+
+    song = Song(title=title, url=song_info["url"])
+
+    if not voice_client.is_playing():
+        await play_song(ctx, song)
+        await ctx.send(f"Now playing: {title}")
+        return
+
+    if now:
+        await skip_queue(ctx, song)
+        return
+
+    await add_to_queue(ctx, song)
+
 
 
 # Command to join voice channel and play music
