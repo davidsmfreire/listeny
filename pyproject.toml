@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "listeny"
-version = "0.2.2"
+version = "0.3.0"
 description = "Discord music bot"
 authors = ["davidsmfreire <davidsmfreire@gmail.com>"]
 license = "MIT"

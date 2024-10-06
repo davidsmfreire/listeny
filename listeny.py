@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import time
 from typing import List, NamedTuple, Optional
 from bs4 import BeautifulSoup
@@ -14,6 +15,8 @@ from yt_dlp import YoutubeDL
 load_dotenv()
 
 TOKEN = os.environ["DISCORD_TOKEN"]
+MUSIC_CHANNEL = int(os.environ["MUSIC_CHANNEL"])
+ADMIN_CHANNEL = int(os.environ["ADMIN_CHANNEL"])
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -34,12 +37,19 @@ ffmpeg_before_options = "-reconnect 1 -reconnect_on_network_error 1"
 class Song(NamedTuple):
     title: str
     url: str
+    prank: bool
 
 
 QUEUE_LIMIT = 30
 music_queue: List[Song] = []
 current_song: Optional[Song] = None
 current_song_start_time: Optional[int] = None
+
+def is_in_channel(*channel_ids):
+    def predicate(ctx):
+        return ctx.channel.id in channel_ids
+    return commands.check(predicate)
+
 
 def seconds_to_hms(seconds: int):
     return time.strftime('%H:%M:%S', time.gmtime(seconds))
@@ -118,6 +128,13 @@ async def view_queue(ctx):
         await ctx.send("Queue is empty")
 
 
+def get_rick_roll_url():
+    NEVER_GONNA_GIVE_YOU_UP = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    with YoutubeDL(youtube_dl_opts) as ydl:
+        song_info = ydl.extract_info(NEVER_GONNA_GIVE_YOU_UP, download=False)
+    return song_info["url"]
+
+
 async def play_song(ctx, song: Song, offset: int = 0):
     ctx.voice_client.stop()
 
@@ -127,7 +144,12 @@ async def play_song(ctx, song: Song, offset: int = 0):
     if offset > 0:
         before_options = ffmpeg_before_options + f"-ss {seconds_to_hms(offset)}"
 
-    audio = discord.FFmpegPCMAudio(song.url, before_options=before_options)
+    url = song.url
+    if song.prank:
+        before_options = ffmpeg_before_options
+        url = get_rick_roll_url()
+
+    audio = discord.FFmpegPCMAudio(url, before_options=before_options)
     ctx.voice_client.play(
         audio,
         after=get_play_next_callback(ctx),
@@ -168,7 +190,12 @@ async def _play_media(ctx, search_query: str, now: bool):
         if title is None:
             title = song_info["title"]
 
-    song = Song(title=title, url=song_info["url"])
+    is_prank = (ctx.author.name == prank_victim) and (random.random() <= prank_probability)
+
+    if is_prank:
+        print(f"Pranking {prank_victim} :D")
+
+    song = Song(title=title, url=song_info["url"], prank=is_prank)
 
     if not voice_client.is_playing():
         await play_song(ctx, song)
@@ -185,11 +212,13 @@ async def _play_media(ctx, search_query: str, now: bool):
 
 # Command to join voice channel and play music
 @bot.command(name="play", help="Play music from YouTube")
+@is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
 async def play_media(ctx, *, search_query: str):
     await _play_media(ctx, search_query, False)
 
 
 @bot.command(name="playnow", help="Play music from YouTube without queue")
+@is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
 async def play_media_now(ctx, *, search_query: str):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("Only administrators can use this command!")
@@ -198,6 +227,7 @@ async def play_media_now(ctx, *, search_query: str):
 
 
 @bot.command(name="skip", help="Skip music from queue")
+@is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
 async def skip(ctx):
     if ctx.voice_client:
         ctx.voice_client.stop()
@@ -209,9 +239,51 @@ async def skip(ctx):
 
 # Command to stop playing music and disconnect the bot
 @bot.command(name="stop", help="Stop media and leave the voice channel")
+@is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
 async def stop_media(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
+
+
+prank_victim = None
+prank_probability = 0.0
+
+
+@bot.command(name="setprank")
+@is_in_channel(ADMIN_CHANNEL)
+async def set_prank(ctx, *, search_query: str):
+    if not ctx.author.guild_permissions.administrator:
+        return
+    
+    victim, probability = search_query.split(" ")
+
+    probability = float(probability)
+
+    if probability < 0.0 or probability > 1.0:
+        await ctx.send("Probability must be between 0.0 and 1.0")
+        return
+
+    global prank_victim, prank_probability
+    prank_victim = victim
+    prank_probability = probability
+    
+    await ctx.send(f"Set prank victim to '{prank_victim}' with probability '{prank_probability}'")
+
+
+@bot.command(name="getprank")
+@is_in_channel(ADMIN_CHANNEL)
+async def get_prank(ctx):
+    await ctx.send(f"Current prank victim is '{prank_victim}' with probability '{prank_probability}'")
+
+
+@bot.command(name="clearprank")
+@is_in_channel(ADMIN_CHANNEL)
+async def clear_prank(ctx):
+    global prank_victim, prank_probability
+    prank_victim = None
+    prank_probability = 0.0
+    await ctx.send(f"Cleared prank victim")
+
 
 bot.run(TOKEN)
 
