@@ -46,7 +46,7 @@ current_song: Optional[Song] = None
 current_song_start_time: Optional[int] = None
 
 def is_in_channel(*channel_ids):
-    def predicate(ctx):
+    def predicate(ctx: commands.Context):
         return ctx.channel.id in channel_ids
     return commands.check(predicate)
 
@@ -58,19 +58,19 @@ def get_queue_repr():
     return "\n".join([f"{i} - {m.title}" for i,m in enumerate(music_queue, 1)])
 
 
-def get_play_next_callback(ctx):
+def get_play_next_callback(ctx: commands.Context):
     def play_next_callback(error):
         bot.loop.create_task(play_next_in_queue(ctx))
     return play_next_callback
 
 
-async def add_to_queue(ctx, song: Song):
+async def add_to_queue(ctx: commands.Context, song: Song):
     if len(music_queue) >= QUEUE_LIMIT:
         await ctx.send("Can't add more songs to queue, limit reached (30)")
     music_queue.append(song)
     await ctx.send(f"Adding to queue:\n{get_queue_repr()}")
 
-async def skip_queue(ctx, song: Song):
+async def skip_queue(ctx: commands.Context, song: Song):
     music_queue.insert(0, song)
     if ctx.voice_client.is_playing():
         ctx.voice_client.stop()
@@ -78,7 +78,7 @@ async def skip_queue(ctx, song: Song):
         await play_next_in_queue(ctx)
 
 
-async def play_next_in_queue(ctx):
+async def play_next_in_queue(ctx: commands.Context):
     voice_client = ctx.voice_client
     if voice_client and len(music_queue) > 0:
         if voice_client.is_playing():
@@ -121,7 +121,7 @@ def get_song_title_from_spotify_url(url):
 
 
 @bot.command(name="queue", help="View queue")
-async def view_queue(ctx):
+async def view_queue(ctx: commands.Context):
     if len(music_queue) > 0:
         await ctx.send("Current queue:\n" + get_queue_repr())
     else:
@@ -135,7 +135,7 @@ def get_rick_roll_url():
     return song_info["url"]
 
 
-async def play_song(ctx, song: Song, offset: int = 0):
+async def play_song(ctx: commands.Context, song: Song, offset: int = 0):
     ctx.voice_client.stop()
 
     global current_song, current_song_start_time
@@ -158,7 +158,7 @@ async def play_song(ctx, song: Song, offset: int = 0):
     current_song_start_time = int(time.time())
 
 
-async def _play_media(ctx, search_query: str, now: bool):
+async def _play_media(ctx: commands.Context, search_query: str, now: bool):
     if not ctx.author.voice:
         await ctx.send("You need to be in a voice channel to play music!")
         return
@@ -213,13 +213,13 @@ async def _play_media(ctx, search_query: str, now: bool):
 # Command to join voice channel and play music
 @bot.command(name="play", help="Play music from YouTube")
 @is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
-async def play_media(ctx, *, search_query: str):
+async def play_media(ctx: commands.Context, *, search_query: str):
     await _play_media(ctx, search_query, False)
 
 
 @bot.command(name="playnow", help="Play music from YouTube without queue")
 @is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
-async def play_media_now(ctx, *, search_query: str):
+async def play_media_now(ctx: commands.Context, *, search_query: str):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("Only administrators can use this command!")
         return
@@ -228,7 +228,7 @@ async def play_media_now(ctx, *, search_query: str):
 
 @bot.command(name="skip", help="Skip music from queue")
 @is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
-async def skip(ctx):
+async def skip(ctx: commands.Context):
     if ctx.voice_client:
         ctx.voice_client.stop()
         if len(music_queue) == 0:
@@ -240,7 +240,7 @@ async def skip(ctx):
 # Command to stop playing music and disconnect the bot
 @bot.command(name="stop", help="Stop media and leave the voice channel")
 @is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
-async def stop_media(ctx):
+async def stop_media(ctx: commands.Context):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
 
@@ -251,7 +251,7 @@ prank_probability = 0.0
 
 @bot.command(name="setprank")
 @is_in_channel(ADMIN_CHANNEL)
-async def set_prank(ctx, *, search_query: str):
+async def set_prank(ctx: commands.Context, *, search_query: str):
     if not ctx.author.guild_permissions.administrator:
         return
     
@@ -272,13 +272,13 @@ async def set_prank(ctx, *, search_query: str):
 
 @bot.command(name="getprank")
 @is_in_channel(ADMIN_CHANNEL)
-async def get_prank(ctx):
+async def get_prank(ctx: commands.Context):
     await ctx.send(f"Current prank victim is '{prank_victim}' with probability '{prank_probability}'")
 
 
 @bot.command(name="clearprank")
 @is_in_channel(ADMIN_CHANNEL)
-async def clear_prank(ctx):
+async def clear_prank(ctx: commands.Context):
     global prank_victim, prank_probability
     prank_victim = None
     prank_probability = 0.0
