@@ -23,7 +23,7 @@ intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix="/", intents=intents, help_command=commands.MinimalHelpCommand())
 
 youtube_dl_opts = {
     "format": "bestaudio/best",
@@ -243,6 +243,29 @@ async def skip(ctx: commands.Context):
 async def stop_media(ctx: commands.Context):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
+
+
+@bot.command(name="clear", help="Clear queue")
+@is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
+async def clear_queue(ctx: commands.Context):
+    music_queue.clear()
+    await ctx.send("Queue cleared")
+
+
+@bot.command(name="remove", help="Remove from queue")
+@is_in_channel(MUSIC_CHANNEL, ADMIN_CHANNEL)
+async def remove_from_queue(ctx: commands.Context, *, index: int):
+    try:
+        song = music_queue.pop(index - 1)
+    except IndexError:
+        await ctx.send("Invalid music index")
+        return
+
+    await ctx.send(f"Removed '{song.title}' from queue")
+    if len(music_queue) > 0:
+        await ctx.send("Current queue:\n" + get_queue_repr())
+    else:
+        await ctx.send("Queue is empty")
 
 
 prank_victim = None
