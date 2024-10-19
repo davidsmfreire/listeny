@@ -231,10 +231,10 @@ async def play_media_now(ctx: commands.Context, *, search_query: str):
 async def skip(ctx: commands.Context):
     if ctx.voice_client:
         ctx.voice_client.stop()
-        if len(music_queue) == 0:
-            await ctx.send("No more songs in queue")
-        else:
-            await play_next_in_queue(ctx)
+        # No need to call play_next_in_queue here
+        # because it is a callback on voice_client.stop
+    else:
+        await ctx.send("Not playing anything right now...")
 
 
 # Command to stop playing music and disconnect the bot
