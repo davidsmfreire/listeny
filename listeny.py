@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import json
 import os
 import random
@@ -6,7 +7,7 @@ from typing import List, NamedTuple, Optional
 from bs4 import BeautifulSoup
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 import requests
 from youtube_search import YoutubeSearch
@@ -23,7 +24,9 @@ intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="/", intents=intents, help_command=commands.MinimalHelpCommand())
+bot = commands.Bot(
+    command_prefix="/", intents=intents, help_command=commands.MinimalHelpCommand()
+)
 
 youtube_dl_opts = {
     "format": "bestaudio/best",
@@ -37,6 +40,7 @@ ffmpeg_before_options = "-reconnect 1 -reconnect_on_network_error 1"
 class Song(NamedTuple):
     title: str
     url: str
+    duration_secs: int
     prank: bool
 
 
@@ -45,22 +49,27 @@ music_queue: List[Song] = []
 current_song: Optional[Song] = None
 current_song_start_time: Optional[int] = None
 
+timeouts = {}
+
 def is_in_channel(*channel_ids):
     def predicate(ctx: commands.Context):
         return ctx.channel.id in channel_ids
+
     return commands.check(predicate)
 
 
 def seconds_to_hms(seconds: int):
-    return time.strftime('%H:%M:%S', time.gmtime(seconds))
+    return time.strftime("%H:%M:%S", time.gmtime(seconds))
+
 
 def get_queue_repr():
-    return "\n".join([f"{i} - {m.title}" for i,m in enumerate(music_queue, 1)])
+    return "\n".join([f"{i} - {m.title}" for i, m in enumerate(music_queue, 1)])
 
 
 def get_play_next_callback(ctx: commands.Context):
     def play_next_callback(error):
         bot.loop.create_task(play_next_in_queue(ctx))
+
     return play_next_callback
 
 
@@ -69,6 +78,7 @@ async def add_to_queue(ctx: commands.Context, song: Song):
         await ctx.send("Can't add more songs to queue, limit reached (30)")
     music_queue.append(song)
     await ctx.send(f"Adding to queue:\n{get_queue_repr()}")
+
 
 async def skip_queue(ctx: commands.Context, song: Song):
     music_queue.insert(0, song)
@@ -101,22 +111,22 @@ def get_song_title_from_spotify_url(url):
     if response.status_code != 200:
         raise Exception(f"Failed to retrieve page. Status code: {response.status_code}")
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    redirect = soup.find('script', {'id': 'urlSchemeConfig'})
+    redirect = soup.find("script", {"id": "urlSchemeConfig"})
     if redirect is not None:
         redirect_content: dict = json.loads(redirect.string)
         if url := redirect_content.get("redirectUrl"):
             return get_song_title_from_spotify_url(url)
 
-    meta_title = soup.find('meta', property='og:title')
-    meta_artist = soup.find('meta', property='og:description')
+    meta_title = soup.find("meta", property="og:title")
+    meta_artist = soup.find("meta", property="og:description")
 
     if not meta_title or not meta_artist:
         raise Exception("Failed to find artist and title tags")
 
-    song_title = meta_title['content']
-    artist_name = meta_artist['content'].split(" · ")[0]
+    song_title = meta_title["content"]
+    artist_name = meta_artist["content"].split(" · ")[0]
     return song_title, artist_name
 
 
@@ -154,6 +164,7 @@ async def play_song(ctx: commands.Context, song: Song, offset: int = 0):
         audio,
         after=get_play_next_callback(ctx),
     )
+    timeouts[ctx.voice_client] = datetime.now() + timedelta(seconds=song.duration_secs)
     current_song = song
     current_song_start_time = int(time.time())
 
@@ -167,6 +178,7 @@ async def _play_media(ctx: commands.Context, search_query: str, now: bool):
 
     if not ctx.voice_client:
         await voice_channel.connect()
+        check_idle_in_voice_channel.start(ctx.voice_client)
 
     voice_client = ctx.voice_client
 
@@ -190,12 +202,14 @@ async def _play_media(ctx: commands.Context, search_query: str, now: bool):
         if title is None:
             title = song_info["title"]
 
-    is_prank = (ctx.author.name == prank_victim) and (random.random() <= prank_probability)
+    is_prank = (ctx.author.name == prank_victim) and (
+        random.random() <= prank_probability
+    )
 
     if is_prank:
         print(f"Pranking {prank_victim} :D")
 
-    song = Song(title=title, url=song_info["url"], prank=is_prank)
+    song = Song(title=title, url=song_info["url"], duration_secs=int(song_info["duration"]), prank=is_prank)
 
     if not voice_client.is_playing():
         await play_song(ctx, song)
@@ -207,7 +221,6 @@ async def _play_media(ctx: commands.Context, search_query: str, now: bool):
         return
 
     await add_to_queue(ctx, song)
-
 
 
 # Command to join voice channel and play music
@@ -243,6 +256,8 @@ async def skip(ctx: commands.Context):
 async def stop_media(ctx: commands.Context):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
+        if ctx.voice_client in timeouts:
+            del timeouts[ctx.voice_client]
 
 
 @bot.command(name="clear", help="Clear queue")
@@ -277,7 +292,7 @@ prank_probability = 0.0
 async def set_prank(ctx: commands.Context, *, search_query: str):
     if not ctx.author.guild_permissions.administrator:
         return
-    
+
     victim, probability = search_query.split(" ")
 
     probability = float(probability)
@@ -289,14 +304,18 @@ async def set_prank(ctx: commands.Context, *, search_query: str):
     global prank_victim, prank_probability
     prank_victim = victim
     prank_probability = probability
-    
-    await ctx.send(f"Set prank victim to '{prank_victim}' with probability '{prank_probability}'")
+
+    await ctx.send(
+        f"Set prank victim to '{prank_victim}' with probability '{prank_probability}'"
+    )
 
 
 @bot.command(name="getprank")
 @is_in_channel(ADMIN_CHANNEL)
 async def get_prank(ctx: commands.Context):
-    await ctx.send(f"Current prank victim is '{prank_victim}' with probability '{prank_probability}'")
+    await ctx.send(
+        f"Current prank victim is '{prank_victim}' with probability '{prank_probability}'"
+    )
 
 
 @bot.command(name="clearprank")
@@ -308,7 +327,14 @@ async def clear_prank(ctx: commands.Context):
     await ctx.send(f"Cleared prank victim")
 
 
-bot.run(TOKEN)
+@tasks.loop(minutes=1)
+async def check_idle_in_voice_channel(voice_client):
+    if voice_client in timeouts and datetime.now() - timeouts[voice_client] > timedelta(minutes=5):
+        print("Idle in voice channel for too long, disconnecting...")
+        await voice_client.disconnect()
+        del timeouts[voice_client]
 
+
+bot.run(TOKEN)
 
 # TODO: pause/resume (hard?)
