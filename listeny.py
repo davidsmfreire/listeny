@@ -334,8 +334,11 @@ async def check_idle_in_voice_channel():
             await voice_client.disconnect()
             del timeouts[voice_client]
 
+@bot.event
+async def on_ready():
+    print(f"We have logged in as {bot.user}")
+    check_idle_in_voice_channel.start()
 
 bot.run(TOKEN)
-check_idle_in_voice_channel.start()
 
 # TODO: pause/resume (hard?)
