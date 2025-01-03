@@ -178,7 +178,6 @@ async def _play_media(ctx: commands.Context, search_query: str, now: bool):
 
     if not ctx.voice_client:
         await voice_channel.connect()
-        check_idle_in_voice_channel.start(ctx.voice_client)
 
     voice_client = ctx.voice_client
 
@@ -328,13 +327,15 @@ async def clear_prank(ctx: commands.Context):
 
 
 @tasks.loop(minutes=1)
-async def check_idle_in_voice_channel(voice_client):
-    if voice_client in timeouts and datetime.now() - timeouts[voice_client] > timedelta(minutes=5):
-        print("Idle in voice channel for too long, disconnecting...")
-        await voice_client.disconnect()
-        del timeouts[voice_client]
+async def check_idle_in_voice_channel():
+    for voice_client in list(timeouts.keys()):
+        if datetime.now() - timeouts[voice_client] > timedelta(minutes=5):
+            print("Idle in voice channel for too long, disconnecting...")
+            await voice_client.disconnect()
+            del timeouts[voice_client]
 
 
 bot.run(TOKEN)
+check_idle_in_voice_channel.start()
 
 # TODO: pause/resume (hard?)
